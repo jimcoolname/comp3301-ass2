@@ -15,13 +15,7 @@
  * =============================================================================
  */
 
-#include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/init.h>
-
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Tony Lee (Roganartu)");
-MODULE_DESCRIPTION("A simple hello world kernel module");
+#include "crypto.h"
 
 int __init init_module(void)
 {

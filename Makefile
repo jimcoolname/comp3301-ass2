@@ -1,5 +1,7 @@
-OBJ=crypto.o
-obj-m += $(OBJ)
+OBJ=cryptomod
+obj-m += $(OBJ).o
+$(OBJ)-objs := crypto.o prac-fops.o
+
 MOD_DIR=/lib/modules/$(shell uname -r)/build
 
 .PHONY: all
