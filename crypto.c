@@ -19,11 +19,28 @@
 
 int __init init_module(void)
 {
-    printk(KERN_INFO "Hello, kernel world!\n");
+    int errno = 0;
+
+    // THIS IS HERE TO MAKE DEV EASIER. REMOVE BEFORE SUBMITTING!!!
+    // THIS IS HERE TO MAKE DEV EASIER. REMOVE BEFORE SUBMITTING!!!
+    // THIS IS HERE TO MAKE DEV EASIER. REMOVE BEFORE SUBMITTING!!!
+    // THIS IS HERE TO MAKE DEV EASIER. REMOVE BEFORE SUBMITTING!!!
+    printk(KERN_INFO "\n\n");
+
+    errno = alloc_chrdev_region(&device, 0, 1, "crypto");
+    if (errno != 0)
+        return errno;
+
+    printk(KERN_INFO "crypto: major=%d, minor=%d", MAJOR(device),
+            MINOR(device));
+
+    printk(KERN_INFO "Initialised cryptomod.ko\n");
     return 0;
 }
 
 void __exit cleanup_module(void)
 {
-    printk(KERN_INFO "Goodbye, kernel world!\n");
+    unregister_chrdev_region(device, 1);
+
+    printk(KERN_INFO "Killed cryptomod.ko\n");
 }

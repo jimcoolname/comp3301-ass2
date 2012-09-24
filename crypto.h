@@ -23,12 +23,14 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/kdev_t.h>
-#include "prac-fops.h"
+#include <linux/fs.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Tony Lee (Roganartu)");
 MODULE_DESCRIPTION("COMP3301 Assignment 2 - Cryptographic Character Device \
         Driver");
+
+dev_t device;
 
 // Private function definitions
 int __init init_module(void);
