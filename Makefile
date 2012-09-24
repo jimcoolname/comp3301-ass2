@@ -1,6 +1,6 @@
 OBJ=cryptomod
 obj-m += $(OBJ).o
-$(OBJ)-objs := crypto.o prac-fops.o
+$(OBJ)-objs := crypto.o
 
 MOD_DIR=/lib/modules/$(shell uname -r)/build
 
