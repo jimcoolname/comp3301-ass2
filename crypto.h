@@ -23,6 +23,7 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/kdev_t.h>
+#include <linux/cdev.h>
 #include <linux/fs.h>
 
 MODULE_LICENSE("GPL");
@@ -30,18 +31,34 @@ MODULE_AUTHOR("Tony Lee (Roganartu)");
 MODULE_DESCRIPTION("COMP3301 Assignment 2 - Cryptographic Character Device \
         Driver");
 
-#define BUFFER_SIZE 4096
+#define BUFFER_SIZE 8192
 
 extern struct file_operations fops;
 
-char buf[BUFFER_SIZE + 1];
-int bufIndex;
-dev_t device;
+dev_t devno;
 
-// Private function definitions
+struct crypto_buffer {
+    char buffer[BUFFER_SIZE + 1]; /* Where the buffer is actually stored */
+    unsigned int size;            /* Amount of data stored in the buffer */
+    int roff;                     /* read offset. -1 if no read fds */
+    int woff;                     /* write offset. -1 if no write fds */
+    int rwoff;                    /* read/write offset. -1 if no rw fds */
+    int placeholder;              /* Prevent automatic deletion upon create */
+    int uniq;                     /* unique buffer identifier */
+    struct crypto_buffer *next;   /* linked list implementation */
+};
+
+struct cdev crypto_cdev;
+
+// Head of buffer linked list. Defaults to NULL if no buffers
+struct crypto_buffer bufhead;
+
+// Private methods
 int __init init_module(void);
 
 void __exit cleanup_module(void);
+
+int crypto_setup_cdev(void);
 
 static int device_open(struct inode *inode, struct file *filp);
 
