@@ -157,6 +157,7 @@ static int device_ioctl(struct inode *inode, struct file *filp,
             retval = crypto_buffer_attach(arg, fm);
             break;
         case CRYPTO_IOCDETACH:
+            retval = crypto_buffer_detach(fm);
             break;
         case CRYPTO_IOCSMODE:
             break;
@@ -314,14 +315,15 @@ int crypto_buffer_attach(int bufid, struct crypto_file_meta *fm)
     return 0;
 }
 
-void crypto_buffer_detach(struct crypto_file_meta *fm)
+int crypto_buffer_detach(struct crypto_file_meta *fm)
 {
     if (fm->buf != NULL) {
         if (fm->mode == O_RDONLY || fm->mode == O_RDWR)
             fm->buf->rcount--;
         if (fm->mode == O_WRONLY || fm->mode == O_RDWR)
             fm->buf->wcount--;
-    }
+    } else
+        return -EOPNOTSUPP;
 
     crypto_buffer_cleanup();
 }

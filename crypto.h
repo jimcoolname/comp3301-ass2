@@ -78,7 +78,7 @@ int crypto_buffer_create(void);
 int crypto_buffer_attach(struct crypto_buffer *buf,
         struct crypto_file_meta *fm);
 
-void crypto_buffer_detach(struct crypto_file_meta *fm);
+int crypto_buffer_detach(struct crypto_file_meta *fm);
 
 static int device_open(struct inode *inode, struct file *filp);
 
