@@ -50,7 +50,8 @@ void __exit cleanup_module(void)
 
     cdev_del(&crypto_cdev);
 
-    kfree(&bufhead);
+    if (bufhead != NULL)
+        kfree(bufhead);
 
     unregister_chrdev_region(devno, 1);
 
