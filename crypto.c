@@ -124,7 +124,44 @@ static ssize_t device_write(struct file *filp, const char *buf, size_t len,
 static int device_ioctl(struct inode *inode, struct file *filp, 
         unsigned int cmd, unsigned long arg)
 {
-    return -ENOTTY;
+    struct crypto_file_meta *fm = filp->private_data;
+    int errno = 0, retval = 0;
+
+    /* Check for inappropriate ioctl before anything else */
+    if (_IOC_TYPE(cmd) != CRYPTO_MAGIC)
+        return -ENOTTY;
+
+    /*
+     * From scull source code of LDD3 (there's really only one way to write it):
+     * https://github.com/starpos/scull/blob/master/scull/main.c#L405-415
+     * the direction is a bitmask, and VERIFY_WRITE catches R/W
+     * transfers. `Type' is user-oriented, while
+     * access_ok is kernel-oriented, so the concept of "read" and
+     * "write" is reversed
+     */
+    if (_IOC_DIR(cmd) & _IOC_READ)
+            errno = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
+    else if (_IOC_DIR(cmd) & _IOC_WRITE)
+            errno =  !access_ok(VERIFY_READ, (void __user *)arg, _IOC_SIZE(cmd));
+    if (errno)
+        return -EFAULT;
+    /* end from scull source */
+
+    switch (cmd) {
+        case CRYPTO_IOCCREATE:
+            retval = crypto_buffer_create(fm);
+            break;
+        case CRYPTO_IOCTDELETE:
+            break;
+        case CRYPTO_IOCTATTACH:
+            break;
+        case CRYPTO_IOCDETACH:
+            break;
+        case CRYPTO_IOCSMODE:
+            break;
+    }
+
+    return retval;
 }
 
 static int device_mmap(struct file *filp, struct vm_area_struct *vma)
@@ -213,14 +250,17 @@ void crypto_buffer_cleanup()
     }
 }
 
-struct crypto_buffer* crypto_buffer_create()
+int crypto_buffer_create(struct crypto_file_meta *fm)
 {
     struct crypto_buffer *newbuf;
     struct crypto_buffer *bufloop;
 
+    if (fm->buf != NULL)
+        return -EOPNOTSUPP;
+
     newbuf = kmalloc(sizeof(struct crypto_buffer), GFP_KERNEL);
     if (newbuf == NULL)
-        return NULL;
+        return -ENOMEM;
 
     /* Clear the buffer so we can start using it */
     crypto_reset_buffer(newbuf);
@@ -237,7 +277,9 @@ struct crypto_buffer* crypto_buffer_create()
         newbuf->next = bufloop->next;
         bufloop->next = newbuf;
     }
-    return newbuf;
+
+    fm->buf = newbuf;
+    return newbuf->id;
 }
 
 int crypto_buffer_attach(struct crypto_buffer *buf,
