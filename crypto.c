@@ -154,6 +154,7 @@ static int device_ioctl(struct inode *inode, struct file *filp,
         case CRYPTO_IOCTDELETE:
             break;
         case CRYPTO_IOCTATTACH:
+            retval = crypto_buffer_attach(arg, fm);
             break;
         case CRYPTO_IOCDETACH:
             break;
@@ -282,30 +283,35 @@ int crypto_buffer_create(struct crypto_file_meta *fm)
     return newbuf->id;
 }
 
-int crypto_buffer_attach(struct crypto_buffer *buf,
-        struct crypto_file_meta *fm)
+int crypto_buffer_attach(int bufid, struct crypto_file_meta *fm)
 {
-    int errno = 0;
+    struct crypto_buffer = buf;
+
+    if (fm->buf != NULL)
+        return -EOPNOTSUPP;
+
+    buf = find_crypto_buffer_by_id(bufid);
+    if (buf == NULL)
+        return -EINVAL;
 
     /* Check if we're exceeding our buffer reference limits */
-    if ((fm->buf->rcount > 0 && fm->mode == O_RDONLY) ||
-            (fm->buf->wcount > 0 && fm->mode == O_WRONLY) ||
-            (fm->mode == O_RDWR && (fm->buf->rcount > 0 ||
-                fm->buf->wcount > 0)))
+    if ((buf->rcount > 0 && fm->mode == O_RDONLY) ||
+            (buf->wcount > 0 && fm->mode == O_WRONLY) ||
+            (fm->mode == O_RDWR && (buf->rcount > 0 || buf->wcount > 0)))
         return -EALREADY;
     
     /* We're not, lets attach then */
     if (fm->mode == O_RDONLY || fm->mode == O_RDWR) {
-        fm->buf->rcount++;
+        buf->rcount++;
     }
     if (fm->mode == O_WRONLY || fm->mode == O_RDWR) {
-        fm->buf->wcount++;
+        buf->wcount++;
     }
     buf->placeholder = 0;
 
     fm->buf = buf;
 
-    return errno;
+    return 0;
 }
 
 void crypto_buffer_detach(struct crypto_file_meta *fm)
@@ -318,4 +324,20 @@ void crypto_buffer_detach(struct crypto_file_meta *fm)
     }
 
     crypto_buffer_cleanup();
+}
+
+struct crypto_buffer* find_crypto_buffer_by_id(int bufid)
+{
+    struct crypto_buffer *buf;
+
+    buf = bufhead;
+
+    while (buf != NULL) {
+        if (buf->id == bufid)
+            return buf;
+        buf = buf->next;
+    }
+
+    /* Didn't find it */
+    return NULL;
 }

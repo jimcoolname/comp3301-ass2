@@ -73,7 +73,7 @@ void crypto_reset_buffer(struct crypto_buffer *buf);
 
 void crypto_buffer_cleanup(void);
 
-struct crypto_buffer* crypto_buffer_create(void);
+int crypto_buffer_create(void);
 
 int crypto_buffer_attach(struct crypto_buffer *buf,
         struct crypto_file_meta *fm);
