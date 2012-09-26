@@ -25,6 +25,7 @@
 #include <linux/kdev_t.h>
 #include <linux/cdev.h>
 #include <linux/fs.h>
+#include "ioctl-1.2.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Tony Lee (Roganartu)");
@@ -51,7 +52,7 @@ struct crypto_buffer {
 struct cdev crypto_cdev;
 
 // Head of buffer linked list. Defaults to NULL if no buffers
-struct crypto_buffer bufhead;
+struct crypto_buffer *bufhead;
 
 // Private methods
 int __init init_module(void);
@@ -69,5 +70,10 @@ static ssize_t device_read(struct file *filp, char *buf, size_t len,
 
 static ssize_t device_write(struct file *filp, const char *buf, size_t len, 
         loff_t * off);
+
+static int device_ioctl(struct inode *inode, struct file *filp, 
+        unsigned int cmd, unsigned long arg);
+
+static int device_mmap(struct file *filp, struct vm_area_struct *vma);
 
 #endif

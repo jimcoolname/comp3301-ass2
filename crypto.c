@@ -50,6 +50,8 @@ void __exit cleanup_module(void)
 
     cdev_del(&crypto_cdev);
 
+    kfree(&bufhead);
+
     unregister_chrdev_region(devno, 1);
 
     printk(KERN_INFO "Killed cryptomod\n");
@@ -76,7 +78,6 @@ static int device_release(struct inode *inode, struct file *filp)
 static ssize_t device_read(struct file *filp, char *buf, size_t len,
         loff_t * off)
 {
-    ssize_t count = 0;
 /* 
     if (bufIndex > BUFFER_SIZE || filp == NULL)
         return -EINVAL;
@@ -98,11 +99,24 @@ static ssize_t device_write(struct file *filp, const char *buf, size_t len,
     return -ENOSYS;
 }
 
+static int device_ioctl(struct inode *inode, struct file *filp, 
+        unsigned int cmd, unsigned long arg)
+{
+    return -ENOTTY;
+}
+
+static int device_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+    return -ENOSYS;
+}
+
 struct file_operations fops = {
     .open = device_open,
     .release = device_release,
     .read = device_read,
     .write = device_write,
+    .ioctl = device_ioctl,
+    .mmap = device_mmap
 };
 
 
