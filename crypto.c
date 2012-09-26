@@ -245,10 +245,20 @@ int crypto_buffer_attach(struct crypto_buffer *buf,
 {
     int errno = 0;
 
-    if (fm->mode == O_RDONLY || fm->mode == O_RDWR)
+    /* Check if we're exceeding our buffer reference limits */
+    if ((fm->buf->rcount > 0 && fm->mode == O_RDONLY) ||
+            (fm->buf->wcount > 0 && fm->mode == O_WRONLY) ||
+            (fm->mode == O_RDWR && (fm->buf->rcount > 0 ||
+                fm->buf->wcount > 0)))
+        return -EALREADY;
+    
+    /* We're not, lets attach then */
+    if (fm->mode == O_RDONLY || fm->mode == O_RDWR) {
         fm->buf->rcount++;
-    if (fm->mode == O_WRONLY || fm->mode == O_RDWR)
+    }
+    if (fm->mode == O_WRONLY || fm->mode == O_RDWR) {
         fm->buf->wcount++;
+    }
     buf->placeholder = 0;
 
     fm->buf = buf;
