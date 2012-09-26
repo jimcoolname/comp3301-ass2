@@ -39,19 +39,27 @@ extern struct file_operations fops;
 dev_t devno;
 
 struct crypto_buffer {
-    char buffer[BUFFER_SIZE + 1]; /* Where the buffer is actually stored */
+    char buffer[BUFFER_SIZE]; /* Where the buffer is actually stored */
     unsigned int size;            /* Amount of data stored in the buffer */
-    int roff;                     /* read offset. -1 if no read fds */
-    int woff;                     /* write offset. -1 if no write fds */
-    int rwoff;                    /* read/write offset. -1 if no rw fds */
+    int roff;                     /* read offset. default 0 */
+    int woff;                     /* write offset. default 0 */
+    int rcount;                   /* Number of read referneces. Max 1 */
+    int wcount;                   /* Number of write referneces. Max 1 */
     int placeholder;              /* Prevent automatic deletion upon create */
-    int uniq;                     /* unique buffer identifier */
+    int id;                       /* unique buffer identifier */
     struct crypto_buffer *next;   /* linked list implementation */
+};
+
+struct crypto_file_meta {
+    int mode;
+    struct crypto_smode r_smode;
+    struct crypto_smode w_smode;
+    struct crypto_buffer *buf;
 };
 
 struct cdev crypto_cdev;
 
-// Head of buffer linked list. Defaults to NULL if no buffers
+// Head of buffer linked list. NULL if no buffers
 struct crypto_buffer *bufhead;
 
 // Private methods
@@ -60,6 +68,17 @@ int __init init_module(void);
 void __exit cleanup_module(void);
 
 int crypto_setup_cdev(void);
+
+void crypto_reset_buffer(struct crypto_buffer *buf);
+
+void crypto_buffer_cleanup(void);
+
+struct crypto_buffer* crypto_buffer_create(void);
+
+int crypto_buffer_attach(struct crypto_buffer *buf,
+        struct crypto_file_meta *fm);
+
+void crypto_buffer_detach(struct crypto_file_meta *fm);
 
 static int device_open(struct inode *inode, struct file *filp);
 
