@@ -31,7 +31,7 @@ int __init init_module(void)
     if (errno != 0)
         return errno;
 
-    printk(KERN_INFO "crypto: major=%d, minor=%d", MAJOR(devno),
+    printk(KERN_INFO "crypto: major=%d, minor=%d\n", MAJOR(devno),
             MINOR(devno));
 
     errno = crypto_setup_cdev();
@@ -48,7 +48,8 @@ int __init init_module(void)
 void __exit cleanup_module(void)
 {
 
-    cdev_del(&crypto_cdev);
+    if (&crypto_cdev != NULL)
+        cdev_del(&crypto_cdev);
 
     if (bufhead != NULL)
         kfree(bufhead);
@@ -60,7 +61,7 @@ void __exit cleanup_module(void)
 
 static int device_open(struct inode *inode, struct file *filp)
 {
-    struct crypto_file_meta *fm = kmalloc(sizeof(struct crypto_file_meta*),
+    struct crypto_file_meta *fm = kmalloc(sizeof(struct crypto_file_meta),
             GFP_KERNEL);
     if (fm == NULL)
         return -ENOMEM;
@@ -75,7 +76,7 @@ static int device_open(struct inode *inode, struct file *filp)
 
     try_module_get(THIS_MODULE); /* increase the refcount of the open module */
 
-    printk(KERN_INFO "Opened new instance of the crytomod device");
+    printk(KERN_INFO "Opened new instance of the crytomod device\n");
 
     return 0;
 }
@@ -85,13 +86,14 @@ static int device_release(struct inode *inode, struct file *filp)
     struct crypto_file_meta *fm = filp->private_data;
 
     if (fm != NULL) {
-        crypto_buffer_detach(fm);
+        if (fm->buf != NULL)
+            crypto_buffer_detach(fm);
         kfree(fm);
     }
 
     module_put(THIS_MODULE); /* decrease the refcount of the open module */
 
-    printk(KERN_INFO "Closed instance of the crytomod device");
+    printk(KERN_INFO "Closed instance of the crytomod device\n");
 
     return 0;
 }
@@ -165,6 +167,7 @@ static ssize_t device_write(struct file *filp, const char *buf, size_t len,
 
     len += len2;
     *off += len;
+    fm->buf->size += len;
     fm->buf->woff = *off;
 
     return len;
@@ -232,7 +235,7 @@ static int device_mmap(struct file *filp, struct vm_area_struct *vma)
     /* The compiler complained about vm_area_struct not having a member
      * vm_offset. Very irritation, no time to fix (not worth it really)
     if (vma->vm_offset != NULL && vma->vm_offset > 0) {
-        /* Given the only two valid request lengths are 4096 and 8192, the only
+         * Given the only two valid request lengths are 4096 and 8192, the only
          * valid offset that can be provided is 4096 with a request length of
          * 4096.
         if (vma->vm_offset != 4096 || length != 4096)
@@ -283,6 +286,9 @@ void crypto_reset_buffer(struct crypto_buffer *buf)
 {
     int x;
     struct crypto_buffer *bufloop;
+
+    if (buf == NULL)
+        return;
 
     memset(&buf->buffer, 0, BUFFER_SIZE);
     buf->size = 0;
