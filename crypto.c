@@ -101,7 +101,7 @@ static int device_release(struct inode *inode, struct file *filp)
 static ssize_t device_read(struct file *filp, char *buf, size_t len,
         loff_t * off)
 {
-    size_t len2 = 0, newlen = 0, f_pos = *off % BUFFER_SIZE;
+    size_t len2 = 0, newlen = 0, f_pos;
     struct crypto_file_meta *fm = filp->private_data;
 
     if (fm == NULL)
@@ -109,15 +109,17 @@ static ssize_t device_read(struct file *filp, char *buf, size_t len,
     if (fm->buf == NULL)
         return -EOPNOTSUPP;
 
-    if (fm->buf->size <= *off || fm->buf->size == 0) {
+    f_pos = fm->buf->roff % BUFFER_SIZE;
+
+    if (fm->buf->size <= fm->buf->roff || fm->buf->size == 0) {
         /* Blocking I/O. Wait for device_write to be called */
-        wait_event_interruptible(wq, fm->buf->size > *off &&
+        wait_event_interruptible(wq, fm->buf->size > fm->buf->roff &&
                 fm->buf->size != 0);
     }
 
     /* Make sure we don't read further than we can */
-    if (len > fm->buf->size - *off)
-        len = fm->buf->size - *off;
+    if (len > fm->buf->size - fm->buf->roff)
+        len = fm->buf->size - fm->buf->roff;
     if (len > BUFFER_SIZE)
         len = BUFFER_SIZE;
 
@@ -133,8 +135,8 @@ static ssize_t device_read(struct file *filp, char *buf, size_t len,
         return -EFAULT;
 
     len += len2;
-    *off += len;
-    fm->buf->roff = *off;
+    fm->buf->roff += len;
+    *off = fm->buf->roff;
 
     /* Catch EOF, pass it on */
     if (buf[0] == -1) {
@@ -144,10 +146,12 @@ static ssize_t device_read(struct file *filp, char *buf, size_t len,
     return len;
 }
 
+/* FIFO means there's no seek. If we always use our own tracked offset,
+ * it will operate as expected. */
 static ssize_t device_write(struct file *filp, const char *buf, size_t len, 
         loff_t * off)
 {
-    size_t len2 = 0, newlen = 0, f_pos = *off % BUFFER_SIZE;
+    size_t len2 = 0, newlen = 0, f_pos;
     struct crypto_file_meta *fm = filp->private_data;
 
     if (fm == NULL)
@@ -155,9 +159,11 @@ static ssize_t device_write(struct file *filp, const char *buf, size_t len,
     if (fm->buf == NULL)
         return -EOPNOTSUPP;
 
+    f_pos = fm->buf->woff % BUFFER_SIZE;
+
     /* Make sure we don't write further than we can */
-    if (*off + len > fm->buf->roff + BUFFER_SIZE)
-        len = fm->buf->roff - *off;
+    if (fm->buf->woff + len > fm->buf->roff + BUFFER_SIZE)
+        len = fm->buf->roff - fm->buf->woff;
     if (len > BUFFER_SIZE)
         len = BUFFER_SIZE;
 
@@ -173,8 +179,8 @@ static ssize_t device_write(struct file *filp, const char *buf, size_t len,
         return -EFAULT;
 
     len += len2;
-    *off += len;
-    fm->buf->woff = *off;
+    fm->buf->woff += len;
+    *off = fm->buf->woff;
     fm->buf->size += len;
 
     /* Wake up the blocking reads */
@@ -342,6 +348,8 @@ void crypto_buffer_cleanup()
             if (tmpbuf == bufhead)
                 bufhead = tmpbuf->next;
             kfree(tmpbuf);
+            if (bufhead == NULL)
+                break;
         }
     }
 }
@@ -425,6 +433,8 @@ int crypto_buffer_detach(struct crypto_file_meta *fm)
             fm->buf->wcount--;
     } else
         return -EOPNOTSUPP;
+
+    fm->buf = NULL;
 
     crypto_buffer_cleanup();
 
