@@ -118,8 +118,8 @@ static ssize_t device_read(struct file *filp, char *buf, size_t len,
         len = BUFFER_SIZE;
 
     /* Wrap around if needed */
-    if (((*off % BUFFER_SIZE) + len) > BUFFER_SIZE) {
-        newlen = (BUFFER_SIZE - (*off % BUFFER_SIZE));
+    if (f_pos + len > BUFFER_SIZE) {
+        newlen = BUFFER_SIZE - f_pos;
         len2 = len - newlen;
         len = newlen;
     }
@@ -130,19 +130,44 @@ static ssize_t device_read(struct file *filp, char *buf, size_t len,
 
     len += len2;
     *off += len;
-    fm->buf->roff += len;
+    fm->buf->roff = *off;
+
     return len;
 }
 
 static ssize_t device_write(struct file *filp, const char *buf, size_t len, 
         loff_t * off)
 {
+    size_t len2 = 0, newlen = 0, f_pos = *off % BUFFER_SIZE;
     struct crypto_file_meta *fm = filp->private_data;
 
+    if (fm == NULL)
+        return -EINVAL;
     if (fm->buf == NULL)
         return -EOPNOTSUPP;
 
-    return -ENOSYS;
+    /* Make sure we don't write further than we can */
+    if (len > *off + fm->buf->roff)
+        len = fm->buf->roff - *off;
+    if (len > BUFFER_SIZE)
+        len = BUFFER_SIZE;
+
+    /* Wrap around if needed */
+    if (f_pos + len > BUFFER_SIZE) {
+        newlen = BUFFER_SIZE - f_pos;
+        len2 = len - newlen;
+        len = newlen;
+    }
+
+    if (copy_from_user(&fm->buf->buffer[f_pos], buf, len) ||
+            (len2 > 0 && copy_from_user(&fm->buf->buffer[0], buf, len2)))
+        return -EFAULT;
+
+    len += len2;
+    *off += len;
+    fm->buf->woff = *off;
+
+    return len;
 }
 
 static int device_ioctl(struct inode *inode, struct file *filp, 
