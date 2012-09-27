@@ -19,7 +19,22 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include "../ioctl-1.2.h"
 
 #define CRYPTO_DEVICE "/dev/crypto"
+
+unsigned int bufid_1;
+unsigned int bufid_2;
+unsigned int fd_write;
+unsigned int fd_read;
+FILE *file_write;
+FILE *file_read;
+
+char *key;
 
 #endif
