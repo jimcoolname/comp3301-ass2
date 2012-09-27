@@ -309,6 +309,7 @@ void crypto_reset_buffer(struct crypto_buffer *buf)
     buf->rcount = 0;
     buf->wcount = 0;
     buf->next = NULL;
+    buf->id = 0;
 
     /* Find next unique value */
     bufloop = bufhead;
@@ -338,18 +339,32 @@ void crypto_buffer_cleanup()
     bufloop = bufhead;
     while (bufloop != NULL) {
         tmpbuf = NULL;
-        if (bufloop->rcount < 1 && bufloop->wcount < 1)
-            tmpbuf = bufloop;
 
-        bufloop = bufloop->next;
+        /* Head node, special case */
+        if (bufloop == bufhead) {
+            if (bufloop->rcount < 1 && bufloop->wcount < 1) {
+                /* New assignments */
+                tmpbuf = bufloop;
+                bufhead = bufloop->next;
+                bufloop = bufhead;
 
-        /* Free the buffer, assigning a new head if necessary */
-        if (tmpbuf != NULL) {
-            if (tmpbuf == bufhead)
-                bufhead = tmpbuf->next;
+                /* Free the head node, then loop again */
+                kfree(tmpbuf);
+                continue;
+            }
+        }
+        /* Following node, normal case */
+        if (bufloop->next != NULL && bufloop->next->rcount < 1 &&
+                bufloop->next->wcount < 1) {
+            tmpbuf = bufloop->next;
+
+            /* Free the buffer, then move forward two nodes */
+            bufloop->next = tmpbuf->next;
+            bufloop = bufloop->next;
             kfree(tmpbuf);
-            if (bufhead == NULL)
-                break;
+        } else {
+            /* So we don't infinitely loop! */
+            bufloop = bufloop->next;
         }
     }
 }
@@ -376,13 +391,20 @@ int crypto_buffer_create(struct crypto_file_meta *fm)
     if (bufhead != newbuf) {
         /* Insert items in order of their IDs. Makes it easier to find the
          * lowest available ID for new buffers */
-        bufloop = bufhead;
-        while (bufloop->next != NULL && bufloop->next->id < newbuf->id) {
-            bufloop = bufloop->next;
-        }
-        if (bufloop != newbuf) {
-            newbuf->next = bufloop->next;
-            bufloop->next = newbuf;
+        if (bufhead->id > newbuf->id) {
+            /* Pre-insert */
+            newbuf->next = bufhead;
+            bufhead = newbuf;
+        } else {
+            /* Post-insert */
+            bufloop = bufhead;
+            while (bufloop->next != NULL && bufloop->next->id < newbuf->id) {
+                bufloop = bufloop->next;
+            }
+            if (bufloop != newbuf) {
+                newbuf->next = bufloop->next;
+                bufloop->next = newbuf;
+            }
         }
     }
 
