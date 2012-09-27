@@ -1,0 +1,8 @@
+*.o
+*.exe
+*.out
+test/echat
+
+*.swp
+.~
+thumbs.db
