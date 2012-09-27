@@ -219,7 +219,40 @@ static int device_ioctl(struct inode *inode, struct file *filp,
 
 static int device_mmap(struct file *filp, struct vm_area_struct *vma)
 {
-    return -ENOSYS;
+    int ret;
+    long length = vma->vm_end - vma->vm_start;
+    struct crypto_file_meta *fm = filp->private_data;
+
+    if (fm == NULL)
+        return -EINVAL;
+    if (fm->buf == NULL)
+        return -EOPNOTSUPP;
+    if (length != 4096 && length != 8192)
+        return -EIO;
+    /* The compiler complained about vm_area_struct not having a member
+     * vm_offset. Very irritation, no time to fix (not worth it really)
+    if (vma->vm_offset != NULL && vma->vm_offset > 0) {
+        /* Given the only two valid request lengths are 4096 and 8192, the only
+         * valid offset that can be provided is 4096 with a request length of
+         * 4096.
+        if (vma->vm_offset != 4096 || length != 4096)
+            return -EIO;
+    } */
+
+    /* Make sure it's read only if write was not explicitly specified */
+    if (!(pgprot_val(vma->vm_page_prot) & PROT_WRITE))
+        vma->vm_page_prot.pgprot = VM_READ;
+
+    /* It's contiguous allocation, so we can grab it all in one piece */
+    if ((ret = remap_pfn_range(vma,
+            vma->vm_start,
+            virt_to_phys((void *) fm->buf->buffer) >> PAGE_SHIFT,
+            length,
+            vma->vm_page_prot)) < 0) {
+        return ret;
+    }
+    
+    return 0;
 }
 
 struct file_operations fops = {

@@ -25,7 +25,10 @@
 #include <linux/kdev_t.h>
 #include <linux/cdev.h>
 #include <linux/fs.h>
+#include <linux/mm.h>
 #include <asm/uaccess.h>
+#include <asm/io.h>
+#include <asm/mman.h>
 #include "ioctl-1.2.h"
 
 MODULE_LICENSE("GPL");
