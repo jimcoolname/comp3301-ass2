@@ -23,6 +23,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <pthread.h>
+#include <signal.h>
 #include <sys/ioctl.h>
 #include "../ioctl-1.2.h"
 
@@ -36,5 +38,9 @@ FILE *file_write;
 FILE *file_read;
 
 char *key;
+
+void *forward_local_input(void *argument);
+
+void *forward_remote_output(void *argument);
 
 #endif

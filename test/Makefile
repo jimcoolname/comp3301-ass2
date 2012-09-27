@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -std=gnu99
+CFLAGS=-Wall -std=gnu99 -pthread
 OBJS=echat.o
 
 all: echat

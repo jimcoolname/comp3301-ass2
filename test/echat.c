@@ -19,7 +19,7 @@
 int main(int argc, char *argv[])
 {
     int err = 0;
-    char *buf;
+    pthread_t threads[2];
 
     bufid_1 = bufid_2 = 0;
 
@@ -83,25 +83,29 @@ user 2: echat encryption_key buffer_id_1 buffer_id_2\n");
     file_write = fdopen(fd_write, "w");
     file_read = fdopen(fd_read, "r");
 
-    if (argc == 2) {
-        buf = malloc(81);
-        if (buf == NULL)
-            return -ENOMEM;
-        while (fgets(buf, 80, stdin) != NULL) {
-            fprintf(file_write, "%s", buf);
-            fflush(file_write);
-        }
-        free(buf);
-    } else {
-        buf = malloc(81);
-        if (buf == NULL)
-            return -ENOMEM;
-        while (fgets(buf, 80, file_read) != NULL) {
-            fprintf(stdout, "%s", buf);
-            fflush(stdout);
-        }
-        free(buf);
+    /* Spawn one thread for reading, one for writing */
+    if(pthread_create(&threads[0], NULL, forward_local_input, NULL)) {
+        fprintf(stderr, "Error spawning thread\n");
+        return 3;
     }
+
+    if(pthread_create(&threads[1], NULL, forward_remote_output, NULL)) {
+        fprintf(stderr, "Error spawning thread\n");
+        pthread_kill(threads[0], SIGINT);
+        return 3;
+    }
+
+    /* Join the writer first. Spec says reader isn't interrupted by remote
+     * actions */
+    if (pthread_join(threads[0], NULL)) {
+        fprintf(stderr, "Error joining thread\n");
+        pthread_kill(threads[0], SIGINT);
+        pthread_kill(threads[1], SIGINT);
+        return 4;
+    }
+    /* Just kill the reader once the writer is finished. It'll never close
+     * on it's own*/
+    pthread_kill(threads[1], SIGINT);
 
     /* Cleanup */
     free(key);
@@ -109,4 +113,36 @@ user 2: echat encryption_key buffer_id_1 buffer_id_2\n");
     close(fd_read);
 
     return 0;
+}
+
+void *forward_local_input(void *argument)
+{
+    char *local = malloc(81);
+    if (local == NULL) {
+        fprintf(stderr, "Unable to allocate memory\n");
+        exit(3);
+    }
+    while (fgets(local, 80, stdin) != NULL) {
+        fprintf(file_write, "%s", local);
+        fflush(file_write);
+    }
+    free(local);
+
+    return NULL;
+}
+
+void *forward_remote_output(void *argument)
+{
+    char *remote = malloc(81);
+    if (remote == NULL) {
+        fprintf(stderr, "Unable to allocate memory\n");
+        exit(3);
+    }
+    while (fgets(remote, 80, file_read) != NULL) {
+        fprintf(stdout, "%s", remote);
+        fflush(stdout);
+    }
+    free(remote);
+
+    return NULL;
 }
