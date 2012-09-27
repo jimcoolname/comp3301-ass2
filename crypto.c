@@ -152,6 +152,7 @@ static int device_ioctl(struct inode *inode, struct file *filp,
             retval = crypto_buffer_create(fm);
             break;
         case CRYPTO_IOCTDELETE:
+            retval = crypto_buffer_delete(arg, fm);
             break;
         case CRYPTO_IOCTATTACH:
             retval = crypto_buffer_attach(arg, fm);
@@ -286,7 +287,7 @@ int crypto_buffer_create(struct crypto_file_meta *fm)
 
 int crypto_buffer_attach(int bufid, struct crypto_file_meta *fm)
 {
-    struct crypto_buffer = buf;
+    struct crypto_buffer *buf;
 
     if (fm->buf != NULL)
         return -EOPNOTSUPP;
@@ -326,6 +327,35 @@ int crypto_buffer_detach(struct crypto_file_meta *fm)
         return -EOPNOTSUPP;
 
     crypto_buffer_cleanup();
+
+    return 0;
+}
+
+int crypto_buffer_delete(int bufid, struct crypto_file_meta *fm)
+{
+    struct crypto_buffer *buf;
+    int errno = 0;
+
+    buf = find_crypto_buffer_by_id(bufid);
+    if (buf == NULL)
+        return -EINVAL;
+
+    errno = crypto_buffer_can_delete(buf, fm);
+    if (errno != 0)
+        return errno;
+    
+    /* Detach the buffer from the file descriptor first */
+    if (fm->buf == buf)
+        fm->buf = NULL;
+
+    /* Clear the reference counters and let the cleanup method deal with it */
+    buf->rcount = 0;
+    buf->wcount = 0;
+    buf->placeholder = 0;
+    crypto_buffer_cleanup();
+
+    return errno;
+
 }
 
 struct crypto_buffer* find_crypto_buffer_by_id(int bufid)
@@ -342,4 +372,32 @@ struct crypto_buffer* find_crypto_buffer_by_id(int bufid)
 
     /* Didn't find it */
     return NULL;
+}
+
+int crypto_buffer_can_delete(struct crypto_buffer *buf,
+        struct crypto_file_meta *fm)
+{
+    if (buf == fm->buf) {
+        /* fd is rw, hence only file attached */
+        if (fm->mode == O_RDWR)
+            return 0;
+
+        /* fd is read and buffer has no write attached */
+        if (fm->mode == O_RDONLY && buf->wcount < 1)
+            return 0;
+
+        /* fd is write and buffer has no read attached */
+        if (fm->mode == O_WRONLY && buf->rcount < 1)
+            return 0;
+
+        /* otherwise has more than just this fd attached */
+        return -EOPNOTSUPP;
+    }
+
+    if (buf->wcount > 0 || buf->rcount > 0)
+        return -EOPNOTSUPP;
+    
+    /* Redundant because the detach method cleans up unreferenced buffers.
+     * this should never happen. */
+    return 0;
 }

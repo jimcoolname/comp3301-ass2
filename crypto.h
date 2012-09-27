@@ -25,6 +25,7 @@
 #include <linux/kdev_t.h>
 #include <linux/cdev.h>
 #include <linux/fs.h>
+#include <asm/uaccess.h>
 #include "ioctl-1.2.h"
 
 MODULE_LICENSE("GPL");
@@ -73,12 +74,18 @@ void crypto_reset_buffer(struct crypto_buffer *buf);
 
 void crypto_buffer_cleanup(void);
 
-int crypto_buffer_create(void);
+int crypto_buffer_create(struct crypto_file_meta *fm);
 
-int crypto_buffer_attach(struct crypto_buffer *buf,
-        struct crypto_file_meta *fm);
+int crypto_buffer_attach(int bufid, struct crypto_file_meta *fm);
 
 int crypto_buffer_detach(struct crypto_file_meta *fm);
+
+int crypto_buffer_delete(int bufid, struct crypto_file_meta *fm);
+
+struct crypto_buffer* find_crypto_buffer_by_id(int bufid);
+
+int crypto_buffer_can_delete(struct crypto_buffer *buf,
+        struct crypto_file_meta *fm);
 
 static int device_open(struct inode *inode, struct file *filp);
 
