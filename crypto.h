@@ -82,6 +82,9 @@ int crypto_buffer_detach(struct crypto_file_meta *fm);
 
 int crypto_buffer_delete(int bufid, struct crypto_file_meta *fm);
 
+unsigned long crypto_buffer_iocsmode(struct crypto_smode *from,
+        struct crypto_file_meta *fm);
+
 struct crypto_buffer* find_crypto_buffer_by_id(int bufid);
 
 int crypto_buffer_can_delete(struct crypto_buffer *buf,

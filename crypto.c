@@ -140,9 +140,9 @@ static int device_ioctl(struct inode *inode, struct file *filp,
      * "write" is reversed
      */
     if (_IOC_DIR(cmd) & _IOC_READ)
-            errno = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
+            errno = !access_ok(VERIFY_WRITE, (void __user *) arg, _IOC_SIZE(cmd));
     else if (_IOC_DIR(cmd) & _IOC_WRITE)
-            errno =  !access_ok(VERIFY_READ, (void __user *)arg, _IOC_SIZE(cmd));
+            errno =  !access_ok(VERIFY_READ, (void __user *) arg, _IOC_SIZE(cmd));
     if (errno)
         return -EFAULT;
     /* end from scull source */
@@ -161,6 +161,7 @@ static int device_ioctl(struct inode *inode, struct file *filp,
             retval = crypto_buffer_detach(fm);
             break;
         case CRYPTO_IOCSMODE:
+            retval = crypto_buffer_iocsmode((void __user *) arg, fm);
             break;
     }
 
@@ -356,6 +357,24 @@ int crypto_buffer_delete(int bufid, struct crypto_file_meta *fm)
 
     return errno;
 
+}
+
+unsigned long crypto_buffer_iocsmode(struct crypto_smode *from,
+        struct crypto_file_meta *fm)
+{
+    struct crypto_smode *to;
+
+    /* Check that smode direction matches what file is capable of */
+    if ((from->dir == CRYPTO_READ && fm->mode == O_WRONLY) ||
+            (from->dir == CRYPTO_WRITE && fm->mode == O_RDONLY))
+        return -ENOTTY;
+
+    if (from->dir == CRYPTO_READ)
+        to = &fm->r_smode;
+    else
+        to = &fm->w_smode;
+
+    return copy_from_user(to, from, sizeof(struct crypto_smode));
 }
 
 struct crypto_buffer* find_crypto_buffer_by_id(int bufid)
