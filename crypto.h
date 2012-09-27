@@ -46,7 +46,6 @@ struct crypto_buffer {
     int woff;                     /* write offset. default 0 */
     int rcount;                   /* Number of read referneces. Max 1 */
     int wcount;                   /* Number of write referneces. Max 1 */
-    int placeholder;              /* Prevent automatic deletion upon create */
     int id;                       /* unique buffer identifier */
     struct crypto_buffer *next;   /* linked list implementation */
 };

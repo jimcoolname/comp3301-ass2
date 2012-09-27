@@ -208,7 +208,6 @@ void crypto_reset_buffer(struct crypto_buffer *buf)
     buf->woff = 0;
     buf->rcount = 0;
     buf->wcount = 0;
-    buf->placeholder = 1;
     buf->next = NULL;
 
     /* Find next unique value */
@@ -239,8 +238,7 @@ void crypto_buffer_cleanup()
     bufloop = bufhead;
     while (bufloop != NULL) {
         tmpbuf = NULL;
-        if (bufloop->rcount < 1 && bufloop->wcount < 1 &&
-                bufloop->placeholder == 0)
+        if (bufloop->rcount < 1 && bufloop->wcount < 1)
             tmpbuf = bufloop;
 
         bufloop = bufloop->next;
@@ -259,6 +257,8 @@ int crypto_buffer_create(struct crypto_file_meta *fm)
     struct crypto_buffer *newbuf;
     struct crypto_buffer *bufloop;
 
+    if (fm == NULL)
+        return -EINVAL;
     if (fm->buf != NULL)
         return -EOPNOTSUPP;
 
@@ -282,7 +282,7 @@ int crypto_buffer_create(struct crypto_file_meta *fm)
         bufloop->next = newbuf;
     }
 
-    fm->buf = newbuf;
+    crypto_buffer_attach(newbuf->id, fm);
     return newbuf->id;
 }
 
@@ -310,7 +310,6 @@ int crypto_buffer_attach(int bufid, struct crypto_file_meta *fm)
     if (fm->mode == O_WRONLY || fm->mode == O_RDWR) {
         buf->wcount++;
     }
-    buf->placeholder = 0;
 
     fm->buf = buf;
 
@@ -352,7 +351,6 @@ int crypto_buffer_delete(int bufid, struct crypto_file_meta *fm)
     /* Clear the reference counters and let the cleanup method deal with it */
     buf->rcount = 0;
     buf->wcount = 0;
-    buf->placeholder = 0;
     crypto_buffer_cleanup();
 
     return errno;
