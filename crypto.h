@@ -26,6 +26,8 @@
 #include <linux/cdev.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/wait.h>
+#include <linux/sched.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/mman.h>
@@ -41,6 +43,8 @@ MODULE_DESCRIPTION("COMP3301 Assignment 2 - Cryptographic Character Device \
 extern struct file_operations fops;
 
 dev_t devno;
+
+static DECLARE_WAIT_QUEUE_HEAD(wq);
 
 struct crypto_buffer {
     char buffer[BUFFER_SIZE]; /* Where the buffer is actually stored */

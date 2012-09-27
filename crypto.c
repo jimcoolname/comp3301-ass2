@@ -109,8 +109,10 @@ static ssize_t device_read(struct file *filp, char *buf, size_t len,
     if (fm->buf == NULL)
         return -EOPNOTSUPP;
 
-    while (fm->buf->size <= *off || fm->buf->size == 0) {
-        /* Blocking I/O */
+    if (fm->buf->size <= *off || fm->buf->size == 0) {
+        /* Blocking I/O. Wait for device_write to be called */
+        wait_event_interruptible(wq, fm->buf->size > *off &&
+                fm->buf->size != 0);
     }
 
     /* Make sure we don't read further than we can */
@@ -127,12 +129,17 @@ static ssize_t device_read(struct file *filp, char *buf, size_t len,
     }
 
     if (copy_to_user(buf, &fm->buf->buffer[f_pos], len) ||
-            (len2 > 0 && copy_to_user(buf, &fm->buf->buffer[0], len2)))
+            (len2 > 0 && copy_to_user(&buf[len], &fm->buf->buffer[0], len2)))
         return -EFAULT;
 
     len += len2;
     *off += len;
     fm->buf->roff = *off;
+
+    /* Catch EOF, pass it on */
+    if (buf[0] == -1) {
+        return 0;
+    }
 
     return len;
 }
@@ -149,7 +156,7 @@ static ssize_t device_write(struct file *filp, const char *buf, size_t len,
         return -EOPNOTSUPP;
 
     /* Make sure we don't write further than we can */
-    if (len > *off + fm->buf->roff)
+    if (*off + len > fm->buf->roff + BUFFER_SIZE)
         len = fm->buf->roff - *off;
     if (len > BUFFER_SIZE)
         len = BUFFER_SIZE;
@@ -167,8 +174,11 @@ static ssize_t device_write(struct file *filp, const char *buf, size_t len,
 
     len += len2;
     *off += len;
-    fm->buf->size += len;
     fm->buf->woff = *off;
+    fm->buf->size += len;
+
+    /* Wake up the blocking reads */
+    wake_up_interruptible(&wq);
 
     return len;
 }
@@ -178,10 +188,6 @@ static int device_ioctl(struct inode *inode, struct file *filp,
 {
     struct crypto_file_meta *fm = filp->private_data;
     int errno = 0, retval = 0;
-
-    /* Check for inappropriate ioctl before anything else */
-    if (_IOC_TYPE(cmd) != CRYPTO_MAGIC)
-        return -ENOTTY;
 
     /*
      * From scull source code of LDD3 (there's really only one way to write it):
@@ -354,20 +360,22 @@ int crypto_buffer_create(struct crypto_file_meta *fm)
     if (newbuf == NULL)
         return -ENOMEM;
 
+    if (bufhead == NULL)
+        bufhead = newbuf;
     /* Clear the buffer so we can start using it */
     crypto_reset_buffer(newbuf);
 
-    if (bufhead == NULL)
-        bufhead = newbuf;
-    else {
+    if (bufhead != newbuf) {
         /* Insert items in order of their IDs. Makes it easier to find the
          * lowest available ID for new buffers */
         bufloop = bufhead;
-        while (bufloop->next->id < newbuf->id) {
+        while (bufloop->next != NULL && bufloop->next->id < newbuf->id) {
             bufloop = bufloop->next;
         }
-        newbuf->next = bufloop->next;
-        bufloop->next = newbuf;
+        if (bufloop != newbuf) {
+            newbuf->next = bufloop->next;
+            bufloop->next = newbuf;
+        }
     }
 
     crypto_buffer_attach(newbuf->id, fm);
@@ -378,6 +386,8 @@ int crypto_buffer_attach(int bufid, struct crypto_file_meta *fm)
 {
     struct crypto_buffer *buf;
 
+    if (fm == NULL)
+        return -EINVAL;
     if (fm->buf != NULL)
         return -EOPNOTSUPP;
 
@@ -406,6 +416,8 @@ int crypto_buffer_attach(int bufid, struct crypto_file_meta *fm)
 
 int crypto_buffer_detach(struct crypto_file_meta *fm)
 {
+    if (fm == NULL)
+        return -EINVAL;
     if (fm->buf != NULL) {
         if (fm->mode == O_RDONLY || fm->mode == O_RDWR)
             fm->buf->rcount--;
@@ -423,6 +435,9 @@ int crypto_buffer_delete(int bufid, struct crypto_file_meta *fm)
 {
     struct crypto_buffer *buf;
     int errno = 0;
+
+    if (fm == NULL)
+        return -EINVAL;
 
     buf = find_crypto_buffer_by_id(bufid);
     if (buf == NULL)
@@ -449,6 +464,9 @@ unsigned long crypto_buffer_iocsmode(struct crypto_smode *from,
         struct crypto_file_meta *fm)
 {
     struct crypto_smode *to;
+
+    if (fm == NULL)
+        return -EINVAL;
 
     /* Check that smode direction matches what file is capable of */
     if ((from->dir == CRYPTO_READ && fm->mode == O_WRONLY) ||
@@ -482,6 +500,9 @@ struct crypto_buffer* find_crypto_buffer_by_id(int bufid)
 int crypto_buffer_can_delete(struct crypto_buffer *buf,
         struct crypto_file_meta *fm)
 {
+    if (fm == NULL || buf == NULL)
+        return -EINVAL;
+
     if (buf == fm->buf) {
         /* fd is rw, hence only file attached */
         if (fm->mode == O_RDWR)
