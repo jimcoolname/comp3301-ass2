@@ -42,8 +42,8 @@ dev_t devno;
 struct crypto_buffer {
     char buffer[BUFFER_SIZE]; /* Where the buffer is actually stored */
     unsigned int size;            /* Amount of data stored in the buffer */
-    int roff;                     /* read offset. default 0 */
-    int woff;                     /* write offset. default 0 */
+    unsigned int roff;            /* read offset. default 0 */
+    unsigned int woff;            /* write offset. default 0 */
     int rcount;                   /* Number of read referneces. Max 1 */
     int wcount;                   /* Number of write referneces. Max 1 */
     int id;                       /* unique buffer identifier */

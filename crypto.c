@@ -99,15 +99,39 @@ static int device_release(struct inode *inode, struct file *filp)
 static ssize_t device_read(struct file *filp, char *buf, size_t len,
         loff_t * off)
 {
+    size_t len2 = 0, newlen = 0, f_pos = *off % BUFFER_SIZE;
     struct crypto_file_meta *fm = filp->private_data;
+
     if (fm == NULL)
         return -EINVAL;
     if (fm->buf == NULL)
         return -EOPNOTSUPP;
-    if (fm->buf->size == 0)
-        return 0;
 
-    return -ENOSYS;
+    while (fm->buf->size <= *off || fm->buf->size == 0) {
+        /* Blocking I/O */
+    }
+
+    /* Make sure we don't read further than we can */
+    if (len > fm->buf->size - *off)
+        len = fm->buf->size - *off;
+    if (len > BUFFER_SIZE)
+        len = BUFFER_SIZE;
+
+    /* Wrap around if needed */
+    if (((*off % BUFFER_SIZE) + len) > BUFFER_SIZE) {
+        newlen = (BUFFER_SIZE - (*off % BUFFER_SIZE));
+        len2 = len - newlen;
+        len = newlen;
+    }
+
+    if (copy_to_user(buf, &fm->buf->buffer[f_pos], len) ||
+            (len2 > 0 && copy_to_user(buf, &fm->buf->buffer[0], len2)))
+        return -EFAULT;
+
+    len += len2;
+    *off += len;
+    fm->buf->roff += len;
+    return len;
 }
 
 static ssize_t device_write(struct file *filp, const char *buf, size_t len, 
