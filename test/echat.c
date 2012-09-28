@@ -36,8 +36,9 @@ int main(int argc, char *argv[])
             break;
         default:
             fprintf(stderr, "Usage: \n\
-user 1: echat encryption_key\n\
-user 2: echat encryption_key buffer_id_1 buffer_id_2\n");
+%c[1muser 1:%c[0m echat encryption_key\n\
+%c[1muser 2:%c[0m echat encryption_key buffer_id_1 buffer_id_2\n",
+            ESC, ESC, ESC, ESC);
             return 1;
     }
 
@@ -160,6 +161,7 @@ void *forward_remote_output(void *argument)
         exit(3);
     }
     while (fgets(remote, 80, file_read) != NULL) {
+        printf("%c[1mStranger:%c[0m ", ESC, ESC);
         fprintf(stdout, "%s", remote);
         fflush(stdout);
     }

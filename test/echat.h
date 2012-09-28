@@ -39,6 +39,9 @@ FILE *file_read;
 
 u8 *key;
 
+/* For bold on/off */
+const char ESC = 27;
+
 void *forward_local_input(void *argument);
 
 void *forward_remote_output(void *argument);
