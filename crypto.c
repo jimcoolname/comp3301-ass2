@@ -21,12 +21,6 @@ int __init init_module(void)
 {
     int errno = 0;
 
-    // THIS IS HERE TO MAKE DEV EASIER. REMOVE BEFORE SUBMITTING!!!
-    // THIS IS HERE TO MAKE DEV EASIER. REMOVE BEFORE SUBMITTING!!!
-    // THIS IS HERE TO MAKE DEV EASIER. REMOVE BEFORE SUBMITTING!!!
-    // THIS IS HERE TO MAKE DEV EASIER. REMOVE BEFORE SUBMITTING!!!
-    printk(KERN_INFO "\n\n");
-
     errno = alloc_chrdev_region(&devno, 0, 1, "crypto");
     if (errno != 0)
         return errno;

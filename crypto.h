@@ -48,7 +48,7 @@ dev_t devno;
 static DECLARE_WAIT_QUEUE_HEAD(wq);
 
 struct crypto_buffer {
-    char buffer[BUFFER_SIZE]; /* Where the buffer is actually stored */
+    char buffer[BUFFER_SIZE];     /* Where the buffer is actually stored */
     unsigned int size;            /* Amount of data stored in the buffer */
     unsigned int roff;            /* read offset. default 0 */
     unsigned int woff;            /* write offset. default 0 */
