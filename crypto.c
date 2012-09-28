@@ -132,12 +132,6 @@ static ssize_t device_read(struct file *filp, char *buf, size_t len,
     }
 
     switch (fm->r_smode.mode) {
-        case CRYPTO_PASSTHROUGH:
-            if (copy_to_user(buf, &fm->buf->buffer[f_pos], len) ||
-                    (len2 > 0 && copy_to_user(buf, &fm->buf->buffer[0],
-                            len2)))
-                return -EFAULT;
-            break;
         case CRYPTO_ENC:
             /* Asymmetric encryption. Encryption is the same as decryption */
         case CRYPTO_DEC:
@@ -160,6 +154,14 @@ static ssize_t device_read(struct file *filp, char *buf, size_t len,
             /* Cleanup */
             kfree(tmpbuf1);
             kfree(tmpbuf2);
+            break;
+        case CRYPTO_PASSTHROUGH:
+            /* Same as default behaviour */
+        default:
+            if (copy_to_user(buf, &fm->buf->buffer[f_pos], len) ||
+                    (len2 > 0 && copy_to_user(&buf[len], &fm->buf->buffer[0],
+                            len2)))
+                return -EFAULT;
     }
 
     len += len2;
@@ -203,13 +205,7 @@ static ssize_t device_write(struct file *filp, const char *buf, size_t len,
         len = newlen;
     }
 
-    switch (fm->w_smode.mode) {
-        case CRYPTO_PASSTHROUGH:
-            if (copy_from_user(&fm->buf->buffer[f_pos], buf, len) ||
-                    (len2 > 0 && copy_from_user(&fm->buf->buffer[0], buf,
-                            len2)))
-                return -EFAULT;
-            break;
+    switch (fm->w_smode.mode) { 
         case CRYPTO_ENC:
             /* Asymmetric encryption. Encryption is the same as decryption */
         case CRYPTO_DEC:
@@ -232,6 +228,14 @@ static ssize_t device_write(struct file *filp, const char *buf, size_t len,
             /* Cleanup */
             kfree(tmpbuf1);
             kfree(tmpbuf2);
+            break;
+        case CRYPTO_PASSTHROUGH:
+            /* Same as default behaviour */
+        default:
+            if (copy_from_user(&fm->buf->buffer[f_pos], buf, len) ||
+                    (len2 > 0 && copy_from_user(&fm->buf->buffer[0], &buf[len],
+                            len2)))
+                return -EFAULT;
     }
 
     len += len2;
