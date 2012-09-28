@@ -1,0 +1,56 @@
+Q1) Why are ioctl calls required as opposed to implementing their functionality
+in read/write functions?
+
+ioctl is short for Input Output ConTroL. It is a method of allowing more complex
+communication between a process and a device. Read/Write are only really
+supposed to be used for sending/receiving input/output, not setting/getting
+metadata. ioctl allows more complex communication, with argument passing that
+permits complex data structures instead of just a stream of characters. It would
+certainly be possible to achieve everything using just read/write and special
+keywords, but managing and escaping these keywords from normal input, as well as
+checking every single input/output from the device for their existence would be
+far too complicated and involve too much processing overhead to be justified.
+
+Q2) What is the diﬀerence between using kmalloc and vmalloc in kernel land? How
+would this affect your device driver? Justify your answer with regards to your
+implementation and how it would differ if you changed from kmalloc to vmalloc
+(or vice versa).
+
+kmalloc allocates memory in contiguous blocks. vmalloc allocates memory in
+non-contiguous blocks. This has a few side-effects:
+    1) In order to allow you to traverse over the memory, vmalloc must map it
+       to a virtual contiguous block. This takes additional time, making vmalloc
+       often slower than kmalloc
+    2) kmalloc is limited in the amount of memory it can allocate. It used to be
+       128KB in older kernels, but it was increased to 4MB sometime in 2.6.x
+    3) It can be hard to get contiguous blocks of memory, particularly after
+       memory gets fragmented. I suspect this is the reason kmalloc has size
+       limits. If there is 10MB available to malloc from, but the biggest
+       contiguous block is 10KB, then 10KB is all kmalloc can give. vmalloc does
+       not have this same restriction.
+If I changed from kmalloc to vmalloc, I would be able to store a much larger
+buffer, but additional code would have to be added to mmap to collect all
+segments of memory for adding to a contiguous block in userspace. The largest
+kmalloc request I have is for each buffer as it is created. The struct is
+slightly larger than 8KB. kmalloc is more than sufficient for this
+implementation, hence why I did not use vmalloc.
+
+Q3) Discuss the effects of fork and the dup family of system calls on your
+device driver. Some things to consider are what happens to buffer reference
+counting, whether or not the two processes share the same attached buffer, what
+happens when one closes the device, etc. You may wish to write a program that
+does this and use its behaviour to justify your answer (you do not need to
+submit any program written for this question).
+
+Because of the nature of fork, in that it copies everything (including file
+descriptors) means my driver's behaviour would be adversely affected by forking.
+File descriptors are basically just an index to an array of file structs in the
+kernel. This means both processes (or both ints if referring to dup) would point
+index the same file struct in the kernel. Things like read/write offsets,
+attached buffers, smode objects and encryption metadata would be controllable by
+either process/file descriptor. This would basically become a first-come,
+first-served system. Whichever process/fd pulls data from the buffer first would
+be the only one to get that data as the offsets would change. One process
+closing the file descriptor would likely lead to error codes returning from the
+kernel on file operations due to the file descriptor no longer pointing to a
+valid file struct.
