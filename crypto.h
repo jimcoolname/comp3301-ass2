@@ -32,6 +32,7 @@
 #include <asm/io.h>
 #include <asm/mman.h>
 #include "ioctl-1.2.h"
+#include "cryptoapi.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Tony Lee (Roganartu)");
