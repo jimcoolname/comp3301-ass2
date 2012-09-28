@@ -512,6 +512,10 @@ unsigned long crypto_buffer_iocsmode(struct crypto_smode *from,
     else
         to = &fm->w_smode;
 
+    /* Key must not be longer than 256 bytes, including null terminator */
+    if (strlen_user(((struct crypto_smode*) from)->key) > 256)
+        return -EINVAL;
+
     return copy_from_user(to, from, sizeof(struct crypto_smode));
 }
 
