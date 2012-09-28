@@ -1,6 +1,5 @@
-OBJ=cryptomod
-obj-m += $(OBJ).o
-$(OBJ)-objs := crypto.o
+OBJ=crypto.o
+obj-m += $(OBJ)
 KBUILD_EXTMOD = $(PWD)
 
 MOD_DIR=/lib/modules/$(shell uname -r)/build
@@ -11,6 +10,4 @@ all:
 
 .PHONY: clean
 clean:
-	mv cryptodev.ko cryptodev.tmp
 	make -C $(MOD_DIR) M=$(PWD) clean
-	mv cryptodev.tmp cryptodev.ko
