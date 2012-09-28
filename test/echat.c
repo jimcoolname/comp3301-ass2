@@ -20,6 +20,7 @@ int main(int argc, char *argv[])
 {
     int err = 0;
     pthread_t threads[2];
+    struct crypto_smode m;
 
     bufid_1 = bufid_2 = 0;
 
@@ -31,7 +32,7 @@ int main(int argc, char *argv[])
             key = malloc(strlen(argv[1]) + 1);
             if (key == NULL)
                 return -ENOMEM;
-            strncpy(key, argv[1], strlen(argv[1]) + 1);
+            memcpy(key, argv[1], strlen(argv[1]) + 1);
             break;
         default:
             fprintf(stderr, "Usage: \n\
@@ -60,6 +61,7 @@ user 2: echat encryption_key buffer_id_1 buffer_id_2\n");
             perror("Error creating buffer");
             return bufid_2;
         }
+ 
         fprintf(stderr, "first_buffer_id: %d, second_buffer_id: %d\n", bufid_1,
                 bufid_2);
     } else if (bufid_1 > 0 && bufid_2 > 0) {
@@ -78,6 +80,25 @@ user 2: echat encryption_key buffer_id_1 buffer_id_2\n");
     } else {
         fprintf(stderr, "Invalid buffer id supplied\n");
         return 2;
+    }
+
+    /* Set up file modes and encryption key */
+    m.key = key;
+    /* Write */
+    m.dir = CRYPTO_WRITE;
+    m.mode = CRYPTO_ENC;
+    err = ioctl(fd_write, CRYPTO_IOCSMODE, &m);
+    if (err != 0) {
+        fprintf(stderr, "Error setting file mode\n");
+        return err;
+    }
+    /* Read */
+    m.dir = CRYPTO_READ;
+    m.mode = CRYPTO_DEC;
+    err = ioctl(fd_read, CRYPTO_IOCSMODE, &m);
+    if (err != 0) {
+        fprintf(stderr, "Error setting file mode\n");
+        return err;
     }
 
     file_write = fdopen(fd_write, "w");

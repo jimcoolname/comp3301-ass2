@@ -37,7 +37,7 @@ unsigned int fd_read;
 FILE *file_write;
 FILE *file_read;
 
-char *key;
+u8 *key;
 
 void *forward_local_input(void *argument);
 
