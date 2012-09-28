@@ -53,6 +53,24 @@ void __exit cleanup_module(void)
     printk(KERN_INFO "Killed cryptomod\n");
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  device_open
+ *
+ *  Description:  Called by kernel whenever the device is opened
+ *                eg: process calls open("/dev/crypto", MODE)
+ * 
+ *      Version:  0.0.1
+ *       Params:  struct *inode
+ *                struct file *filp
+ *      Returns:  int status
+ *                    -ENOMEM if kmalloc fails
+ *                    0 otherwise
+ *        Usage:  device_open( struct inode *inode, struct file *filp )
+ *      Outputs:  N/A
+ *        Notes:  
+ * =============================================================================
+ */
 static int device_open(struct inode *inode, struct file *filp)
 {
     struct crypto_file_meta *fm = kmalloc(sizeof(struct crypto_file_meta),
@@ -75,6 +93,22 @@ static int device_open(struct inode *inode, struct file *filp)
     return 0;
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  device_release
+ *
+ *  Description:  Called by kernel whenever the device is closed
+ *                eg: process calls close(fd)
+ * 
+ *      Version:  0.0.1
+ *       Params:  struct *inode
+ *                struct file *filp
+ *      Returns:  int status is always 0. Not guaranteed to succeed, however
+ *        Usage:  device_release( struct inode *inode, struct file *filp )
+ *      Outputs:  N/A
+ *        Notes:  
+ * =============================================================================
+ */
 static int device_release(struct inode *inode, struct file *filp)
 {
     struct crypto_file_meta *fm = filp->private_data;
@@ -92,8 +126,33 @@ static int device_release(struct inode *inode, struct file *filp)
     return 0;
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  device_read
+ *
+ *  Description:  Called by kernel whenever the device is read from
+ *                eg: process calls fgets
+ * 
+ *      Version:  0.0.1
+ *       Params:  struct file *filp
+ *                char *buf
+ *                size_t len
+ *                loff_t *off
+ *      Returns:  int status
+ *                    -EINVAL if filp->private_data is NULL
+ *                    -EOPNOTSUPP if the file has no buffer attached
+ *                    -ENOMEM if kmalloc fails
+ *                    -EFAULT if not permitted to access userspace buffer (*buf)
+ *                    0 if EOF
+ *                    number of characters/bytes read otherwise
+ *        Usage:  device_read( struct file *filp, char *buf, size_t len,
+ *                        loff_t *off )
+ *      Outputs:  N/A
+ *        Notes:  
+ * =============================================================================
+ */
 static ssize_t device_read(struct file *filp, char *buf, size_t len,
-        loff_t * off)
+        loff_t *off)
 {
     char *tmpbuf1, *tmpbuf2;
     size_t len2 = 0, newlen = 0, f_pos;
@@ -170,10 +229,38 @@ static ssize_t device_read(struct file *filp, char *buf, size_t len,
     return len;
 }
 
-/* FIFO means there's no seek. If we always use our own tracked offset,
- * it will operate as expected. */
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  device_write
+ *
+ *  Description:  Called by kernel whenever the device is written to
+ *                eg: process calls fputs or fprintf
+ * 
+ *      Version:  0.0.1
+ *       Params:  struct file *filp
+ *                char *buf
+ *                size_t len
+ *                loff_t *off
+ *      Returns:  int status
+ *                    -EINVAL if filp->private_data is NULL
+ *                    -EOPNOTSUPP if the file has no buffer attached
+ *                    -ENOMEM if kmalloc fails
+ *                    -EFAULT if not permitted to access userspace buffer (*buf)
+ *                    number of characters/bytes written otherwise
+ *        Usage:  device_write( struct file *filp, char *buf, size_t len,
+ *                        loff_t *off )
+ *      Outputs:  N/A
+ *        Notes:  FIFO means there's no seek. If we always use the offset stored
+ *                in the buffer it will operate as expected.
+ *                Max able to written is 8192 chars. eg: if woff = 1 and
+ *                roff = 1, we can wrap around the buffer all the way to
+ *                f_pos = 0 without overwriting anything the read buffer hasn't
+ *                seen yet.
+ * =============================================================================
+ */
+/*  */
 static ssize_t device_write(struct file *filp, const char *buf, size_t len, 
-        loff_t * off)
+        loff_t *off)
 {
     char *tmpbuf1, *tmpbuf2;
     size_t len2 = 0, newlen = 0, f_pos;
@@ -243,6 +330,30 @@ static ssize_t device_write(struct file *filp, const char *buf, size_t len,
     return len;
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  device_ioctl
+ *
+ *  Description:  Called by kernel to set the device metadata usually
+ *                eg: process calls ioctl
+ * 
+ *      Version:  0.0.1
+ *       Params:  struct inode *inode
+ *                struct file *filp
+ *                unsigned int cmd
+ *                unsigned long arg
+ *      Returns:  int status
+ *                    -EFAULT if not permitted to access userspace requested
+ *                    negative error code according to called sub methods
+ *                    0 otherwise
+ *        Usage:  device_ioctl( struct inode *inode, struct file *filp,
+ *                        unsigned int cmd, unsigned long arg )
+ *      Outputs:  N/A
+ *        Notes:  cmd is a set of bitwise options.
+ *                arg is a void pointer to userspace which needs to be
+ *                dereferenced before use and copied for storing outside here
+ * =============================================================================
+ */
 static int device_ioctl(struct inode *inode, struct file *filp, 
         unsigned int cmd, unsigned long arg)
 {
@@ -289,6 +400,32 @@ static int device_ioctl(struct inode *inode, struct file *filp,
     return retval;
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  device_mmap
+ *
+ *  Description:  Called by the kernel to return a userspace mapping of
+ *                a buffer
+ *                eg: process calls mmap
+ * 
+ *      Version:  0.0.1
+ *       Params:  struct file *filp
+ *                struct vm_area_struct *vma
+ *      Returns:  int status
+ *                    -EINVAL if filp->private_data is NULL
+ *                    -EOPNOTSUPP if the file has no buffer attached
+ *                    -EIO if requested length is not block aligned ie:
+ *                        equal to 4096 or 8192
+ *                    number of bytes mapped otherwise
+ *        Usage:  device_mmap( struct file *filp, struct vm_area_struct *vma )
+ *      Outputs:  N/A
+ *        Notes:  The vma struct doesn't seem to have an offset
+ *                attribute. The spec said to use it, but it's not there and we
+ *                weren't informed of where to find it. Best I could find, it is
+ *                supposed to be at vm_offset but it wasn't there. Figured the
+ *                mark or two I might lose by not having it were negligible.
+ * =============================================================================
+ */
 static int device_mmap(struct file *filp, struct vm_area_struct *vma)
 {
     int ret;
@@ -327,6 +464,7 @@ static int device_mmap(struct file *filp, struct vm_area_struct *vma)
     return 0;
 }
 
+/* Map the file operation struct objects to their methods */
 struct file_operations fops = {
     .open = device_open,
     .release = device_release,
@@ -336,7 +474,22 @@ struct file_operations fops = {
     .mmap = device_mmap
 };
 
-
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  crypto_setup_cdev
+ *
+ *  Description:  Sets up the cdev object that describes this object
+ * 
+ *      Version:  0.0.1
+ *       Params:  void
+ *      Returns:  int errno if there was a problem with cdev_add
+ *        Usage:  crypto_setup_cdev()
+ *      Outputs:  N/A
+ *        Notes:  The cdev object is largely unnecessary due to the fact we only
+ *                have one device that uses this driver. Nonetheless, the kernel
+ *                requires we declare and add a cdev object.
+ * =============================================================================
+ */
 int crypto_setup_cdev(void)
 {
     int errno = 0;
@@ -351,6 +504,22 @@ int crypto_setup_cdev(void)
     return errno;
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  crypto_reset_buffer
+ *
+ *  Description:  Initialises/clears the given buffer. Sets all offsets and
+ *                counts to 0, allocates the next available unique id and
+ *                inserts into the linked list accordingly.
+ * 
+ *      Version:  0.0.1
+ *       Params:  struct crypto_buffer *buf
+ *      Returns:  void
+ *        Usage:  crypto_reset_buffer( struct crypto_buffer *buf )
+ *      Outputs:  N/A
+ *        Notes:  
+ * =============================================================================
+ */
 void crypto_reset_buffer(struct crypto_buffer *buf)
 {
     int x;
@@ -388,6 +557,24 @@ void crypto_reset_buffer(struct crypto_buffer *buf)
     }
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  crypto_buffer_cleanup
+ *
+ *  Description:  This is the buffer garbage collection. It is called after
+ *                every detach event.
+ *                Basically just loops through from the head node, looking for
+ *                any nodes that have a zero reference count. If they do, they
+ *                are removed from the list and freed. Simple.
+ * 
+ *      Version:  0.0.1
+ *       Params:  void
+ *      Returns:  void
+ *        Usage:  crypto_buffer_cleanup()
+ *      Outputs:  N/A
+ *        Notes:  
+ * =============================================================================
+ */
 void crypto_buffer_cleanup()
 {
     struct crypto_buffer *bufloop;
@@ -426,6 +613,26 @@ void crypto_buffer_cleanup()
     }
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  crypto_buffer_create
+ *
+ *  Description:  Creates a new buffer object and implcitly attaches it to the
+ *                given file object.
+ * 
+ *      Version:  0.0.1
+ *       Params:  struct crypto_file_meta *fm
+ *      Returns:  int buffer_id
+ *                    -EINVAL if fm is NULL
+ *                    -EOPNOTSUPP if the file already has a buffer attached
+ *                    -ENOMEM if kmalloc fails
+ *                    newly created buffer id otherwise
+ *        Usage:  crypto_buffer_create( struct crypto_file_meta *fm )
+ *      Outputs:  N/A
+ *        Notes:  Inserts items into the linked list in order, to simplify
+ *                searching for new unique ids
+ * =============================================================================
+ */
 int crypto_buffer_create(struct crypto_file_meta *fm)
 {
     struct crypto_buffer *newbuf;
@@ -469,6 +676,26 @@ int crypto_buffer_create(struct crypto_file_meta *fm)
     return newbuf->id;
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  crypto_buffer_attach
+ *
+ *  Description:  Attaches the given file object to the given buffer by id
+ *                Increments buffer reader/writer count according to the file's
+ *                access mode.
+ * 
+ *      Version:  0.0.1
+ *       Params:  int bufid
+ *                struct crypto_file_meta *fm
+ *      Returns:  int status
+ *                    -EINVAL if fm is NULL or buffer does not exist
+ *                    -EOPNOTSUPP if the file already has a buffer attached
+ *                    0 otherwise
+ *        Usage:  crypto_buffer_attach( int bufid, struct crypto_file_meta *fm )
+ *      Outputs:  N/A
+ *        Notes:  
+ * =============================================================================
+ */
 int crypto_buffer_attach(int bufid, struct crypto_file_meta *fm)
 {
     struct crypto_buffer *buf;
@@ -501,6 +728,26 @@ int crypto_buffer_attach(int bufid, struct crypto_file_meta *fm)
     return 0;
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  crypto_buffer_detach
+ *
+ *  Description:  Detaches the given file object from it's buffer.
+ *                Decrements buffer reader/writer count according to the file's
+ *                access mode.
+ *                Calls buffer garbage collection before returning
+ * 
+ *      Version:  0.0.1
+ *       Params:  struct crypto_file_meta *fm
+ *      Returns:  int status
+ *                    -EINVAL if fm is NULL
+ *                    -EINOTSUPP if file has no buffer attached
+ *                    0 otherwise
+ *        Usage:  crypto_buffer_detach( struct crypto_file_meta *fm )
+ *      Outputs:  N/A
+ *        Notes:  
+ * =============================================================================
+ */
 int crypto_buffer_detach(struct crypto_file_meta *fm)
 {
     if (fm == NULL)
@@ -520,6 +767,26 @@ int crypto_buffer_detach(struct crypto_file_meta *fm)
     return 0;
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  crypto_buffer_delete
+ *
+ *  Description:  Explicitly deletes the given buffer. Not guaranteed to succeed
+ *                Will fail if the given file is not the only file attached to
+ *                the given buffer
+ * 
+ *      Version:  0.0.1
+ *       Params:  int bufid
+ *                struct crypto_file_meta *fm
+ *      Returns:  int status
+ *                    -EINVAL if fm is NULL or buffer does not exist
+ *                    negative error code from crypto_buffer_can_delete if false
+ *                    0 otherwise
+ *        Usage:  crypto_buffer_delete( int bufid, struct crypto_file_meta *fm )
+ *      Outputs:  N/A
+ *        Notes:  
+ * =============================================================================
+ */
 int crypto_buffer_delete(int bufid, struct crypto_file_meta *fm)
 {
     struct crypto_buffer *buf;
@@ -549,6 +816,28 @@ int crypto_buffer_delete(int bufid, struct crypto_file_meta *fm)
 
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  crypto_buffer_iocsmode
+ *
+ *  Description:  Sets the s_mode of the given file
+ * 
+ *      Version:  0.0.1
+ *       Params:  struct crypto_smode *from
+ *                struct crypto_file_meta *fm
+ *      Returns:  int status
+ *                    -EINVAL if fm is NULL or from is NULL or encryption key is
+ *                        longer than 256 characters
+ *                    -ENOTTY if file has insufficient privileges to use given
+ *                        s_mode. eg: read file given write s_mode data
+ *                    -EFAULT if not permitted to access userspace requested
+ *                    0 otherwise
+ *        Usage:  crypto_buffer_iocsmode( struct crypto_smode *from,
+ *                        struct crypto_file_meta *fm )
+ *      Outputs:  N/A
+ *        Notes:  
+ * =============================================================================
+ */
 unsigned long crypto_buffer_iocsmode(struct crypto_smode *from,
         struct crypto_file_meta *fm)
 {
@@ -581,7 +870,7 @@ unsigned long crypto_buffer_iocsmode(struct crypto_smode *from,
 
     err = copy_from_user(to, from, sizeof(struct crypto_smode));
     if (err != 0)
-        return err;
+        return -EFAULT;
 
     /* Initialise encryption api */
     if (from->mode != CRYPTO_PASSTHROUGH) {
@@ -591,6 +880,23 @@ unsigned long crypto_buffer_iocsmode(struct crypto_smode *from,
     return err;
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  find_crypto_buffer_by_id
+ *
+ *  Description:  Loops through the buffer linked list looking for the given
+ *                buffer id
+ * 
+ *      Version:  0.0.1
+ *       Params:  int bufid
+ *      Returns:  struct crypto_buffer*
+ *                    NULL if no buffer found
+ *                    buffer otherwise
+ *        Usage:  find_crypto_buffer_by_id( int bufid )
+ *      Outputs:  N/A
+ *        Notes:  
+ * =============================================================================
+ */
 struct crypto_buffer* find_crypto_buffer_by_id(int bufid)
 {
     struct crypto_buffer *buf;
@@ -607,6 +913,26 @@ struct crypto_buffer* find_crypto_buffer_by_id(int bufid)
     return NULL;
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  crypto_buffer_can_delete
+ *
+ *  Description:  Determines whether a given buffer can be deleted or not. Only
+ *                considers attached reader/writer counts
+ * 
+ *      Version:  0.0.1
+ *       Params:  struct crypto_buffer *buf
+ *                struct crypto_file_meta *fm
+ *      Returns:  int status
+ *                    -EINVAL if fm is NULL or buf is NULL
+ *                    -EOPNOTSUPP if cannot delete
+ *                    0 otherwise
+ *        Usage:  crypto_buffer_can_delete( struct crypto_buffer *buf,
+ *                        struct crypto_file_meta *fm )
+ *      Outputs:  N/A
+ *        Notes:  
+ * =============================================================================
+ */
 int crypto_buffer_can_delete(struct crypto_buffer *buf,
         struct crypto_file_meta *fm)
 {
@@ -634,6 +960,6 @@ int crypto_buffer_can_delete(struct crypto_buffer *buf,
         return -EOPNOTSUPP;
     
     /* Redundant because the detach method cleans up unreferenced buffers.
-     * this should never happen. */
+     * Execution should never reach this point */
     return 0;
 }
