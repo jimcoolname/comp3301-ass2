@@ -101,6 +101,7 @@ static int device_release(struct inode *inode, struct file *filp)
 static ssize_t device_read(struct file *filp, char *buf, size_t len,
         loff_t * off)
 {
+    char *tmpbuf1, *tmpbuf2;
     size_t len2 = 0, newlen = 0, f_pos;
     struct crypto_file_meta *fm = filp->private_data;
 
@@ -130,9 +131,36 @@ static ssize_t device_read(struct file *filp, char *buf, size_t len,
         len = newlen;
     }
 
-    if (copy_to_user(buf, &fm->buf->buffer[f_pos], len) ||
-            (len2 > 0 && copy_to_user(&buf[len], &fm->buf->buffer[0], len2)))
-        return -EFAULT;
+    switch (fm->r_smode.mode) {
+        case CRYPTO_PASSTHROUGH:
+            if (copy_to_user(buf, &fm->buf->buffer[f_pos], len) ||
+                    (len2 > 0 && copy_to_user(buf, &fm->buf->buffer[0],
+                            len2)))
+                return -EFAULT;
+            break;
+        case CRYPTO_ENC:
+            /* Asymmetric encryption. Encryption is the same as decryption */
+        case CRYPTO_DEC:
+            /* Encrypt before we store */
+            tmpbuf1 = kmalloc(len + len2 + 1, GFP_KERNEL);
+            tmpbuf2 = kmalloc(len + len2 + 1, GFP_KERNEL);
+            if (tmpbuf1 == NULL || tmpbuf2 == NULL)
+                return -ENOMEM;
+            memcpy(tmpbuf1, &fm->buf->buffer[f_pos], len);
+            if (len2 > 0)
+                memcpy(tmpbuf1, &fm->buf->buffer[0], len2);
+            cryptodev_docrypt(&fm->r_crypt, (u8*) tmpbuf1, (u8*) tmpbuf2,
+                    len + len2);
+            tmpbuf2[len + len2] = 0;
+
+            /* Send encrypted/decryped data to user */
+            if (copy_to_user(buf, tmpbuf2, len + len2))
+                return -EFAULT;
+
+            /* Cleanup */
+            kfree(tmpbuf1);
+            kfree(tmpbuf2);
+    }
 
     len += len2;
     fm->buf->roff += len;
@@ -151,6 +179,7 @@ static ssize_t device_read(struct file *filp, char *buf, size_t len,
 static ssize_t device_write(struct file *filp, const char *buf, size_t len, 
         loff_t * off)
 {
+    char *tmpbuf1, *tmpbuf2;
     size_t len2 = 0, newlen = 0, f_pos;
     struct crypto_file_meta *fm = filp->private_data;
 
@@ -174,9 +203,36 @@ static ssize_t device_write(struct file *filp, const char *buf, size_t len,
         len = newlen;
     }
 
-    if (copy_from_user(&fm->buf->buffer[f_pos], buf, len) ||
-            (len2 > 0 && copy_from_user(&fm->buf->buffer[0], buf, len2)))
-        return -EFAULT;
+    switch (fm->w_smode.mode) {
+        case CRYPTO_PASSTHROUGH:
+            if (copy_from_user(&fm->buf->buffer[f_pos], buf, len) ||
+                    (len2 > 0 && copy_from_user(&fm->buf->buffer[0], buf,
+                            len2)))
+                return -EFAULT;
+            break;
+        case CRYPTO_ENC:
+            /* Asymmetric encryption. Encryption is the same as decryption */
+        case CRYPTO_DEC:
+            /* Encrypt before we store */
+            tmpbuf1 = kmalloc(len + len2 + 1, GFP_KERNEL);
+            tmpbuf2 = kmalloc(len + len2 + 1, GFP_KERNEL);
+            if (tmpbuf1 == NULL || tmpbuf2 == NULL)
+                return -ENOMEM;
+            if (copy_from_user(tmpbuf1, buf, len + len2))
+                return -EFAULT;
+            cryptodev_docrypt(&fm->w_crypt, (u8*) tmpbuf1, (u8*) tmpbuf2,
+                    len + len2);
+            tmpbuf2[len + len2] = 0;
+
+            /* Copy encrypted/decryped data */
+            memcpy(&fm->buf->buffer[f_pos], &tmpbuf2[0], len);
+            if (len2 > 0)
+                memcpy(&fm->buf->buffer[0], &tmpbuf2[len], len2);
+
+            /* Cleanup */
+            kfree(tmpbuf1);
+            kfree(tmpbuf2);
+    }
 
     len += len2;
     fm->buf->woff += len;
@@ -200,6 +256,7 @@ static int device_ioctl(struct inode *inode, struct file *filp,
      * https://github.com/starpos/scull/blob/master/scull/main.c#L405-415
      * Basically it just verifies that the kernel has read/write access to
      * whatever we're trying to make it do
+     * START SCULL SOURCE
      * the direction is a bitmask, and VERIFY_WRITE catches R/W
      * transfers. `Type' is user-oriented, while
      * access_ok is kernel-oriented, so the concept of "read" and
@@ -211,7 +268,7 @@ static int device_ioctl(struct inode *inode, struct file *filp,
             errno =  !access_ok(VERIFY_READ, (void __user *) arg, _IOC_SIZE(cmd));
     if (errno)
         return -EFAULT;
-    /* end from scull source */
+    /* END SCULL SOURCE */
 
     switch (cmd) {
         case CRYPTO_IOCCREATE:
@@ -498,8 +555,10 @@ unsigned long crypto_buffer_iocsmode(struct crypto_smode *from,
         struct crypto_file_meta *fm)
 {
     struct crypto_smode *to;
+    struct cryptodev_state *crypt_obj;
+    int err = 0;
 
-    if (fm == NULL)
+    if (fm == NULL || from == NULL)
         return -EINVAL;
 
     /* Check that smode direction matches what file is capable of */
@@ -507,16 +566,31 @@ unsigned long crypto_buffer_iocsmode(struct crypto_smode *from,
             (from->dir == CRYPTO_WRITE && fm->mode == O_RDONLY))
         return -ENOTTY;
 
-    if (from->dir == CRYPTO_READ)
+    if (from->dir == CRYPTO_READ) {
         to = &fm->r_smode;
-    else
+        crypt_obj = &fm->r_crypt;
+    }
+    else {
         to = &fm->w_smode;
+        crypt_obj = &fm->w_crypt;
+    }
 
-    /* Key must not be longer than 256 bytes, including null terminator */
-    if (strlen_user(((struct crypto_smode*) from)->key) > 256)
-        return -EINVAL;
+    if (from->mode != CRYPTO_PASSTHROUGH) {
+        /* Key must not be longer than 256 bytes, including null terminator */
+        if (strlen_user(from->key) > 256)
+            return -EINVAL;
+    }
 
-    return copy_from_user(to, from, sizeof(struct crypto_smode));
+    err = copy_from_user(to, from, sizeof(struct crypto_smode));
+    if (err != 0)
+        return err;
+
+    /* Initialise encryption api */
+    if (from->mode != CRYPTO_PASSTHROUGH) {
+        cryptodev_init(crypt_obj, from->key, strlen_user(from->key) - 1);
+    }
+
+    return err;
 }
 
 struct crypto_buffer* find_crypto_buffer_by_id(int bufid)

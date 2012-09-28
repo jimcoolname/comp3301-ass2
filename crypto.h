@@ -61,7 +61,9 @@ struct crypto_buffer {
 struct crypto_file_meta {
     int mode;
     struct crypto_smode r_smode;
+    struct cryptodev_state r_crypt;
     struct crypto_smode w_smode;
+    struct cryptodev_state w_crypt;
     struct crypto_buffer *buf;
 };
 

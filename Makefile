@@ -11,4 +11,6 @@ all:
 
 .PHONY: clean
 clean:
+	mv cryptodev.ko cryptodev.tmp
 	make -C $(MOD_DIR) M=$(PWD) clean
+	mv cryptodev.tmp cryptodev.ko
