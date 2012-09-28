@@ -198,6 +198,8 @@ static int device_ioctl(struct inode *inode, struct file *filp,
     /*
      * From scull source code of LDD3 (there's really only one way to write it):
      * https://github.com/starpos/scull/blob/master/scull/main.c#L405-415
+     * Basically it just verifies that the kernel has read/write access to
+     * whatever we're trying to make it do
      * the direction is a bitmask, and VERIFY_WRITE catches R/W
      * transfers. `Type' is user-oriented, while
      * access_ok is kernel-oriented, so the concept of "read" and
@@ -245,7 +247,7 @@ static int device_mmap(struct file *filp, struct vm_area_struct *vma)
     if (length != 4096 && length != 8192)
         return -EIO;
     /* The compiler complained about vm_area_struct not having a member
-     * vm_offset. Very irritation, no time to fix (not worth it really)
+     * vm_offset. Very irritatiing, no time to fix (not worth it really)
     if (vma->vm_offset != NULL && vma->vm_offset > 0) {
          * Given the only two valid request lengths are 4096 and 8192, the only
          * valid offset that can be provided is 4096 with a request length of
