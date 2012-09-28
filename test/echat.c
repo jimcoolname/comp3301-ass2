@@ -137,6 +137,21 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  forward_local_input
+ *
+ *  Description:  Spawned by pthread to handle waiting and sending all stdin
+ *                input to the crypto device
+ * 
+ *      Version:  0.0.1
+ *       Params:  void *argument
+ *      Returns:  NULL
+ *        Usage:  forward_local_input( void *argument )
+ *      Outputs:  Unable to allocate memory (if malloc fails)
+ *        Notes:  
+ * =============================================================================
+ */
 void *forward_local_input(void *argument)
 {
     char *local = malloc(81);
@@ -153,6 +168,21 @@ void *forward_local_input(void *argument)
     return NULL;
 }
 
+/* 
+ * ===  FUNCTION  ==============================================================
+ *         Name:  forward_remote_output
+ *
+ *  Description:  Spawned by pthread to handle waiting and printing all device
+ *                output
+ * 
+ *      Version:  0.0.1
+ *       Params:  void *argument
+ *      Returns:  NULL
+ *        Usage:  forward_remote_output( void *argument )
+ *      Outputs:  Unable to allocate memory (if malloc fails)
+ *        Notes:  
+ * =============================================================================
+ */
 void *forward_remote_output(void *argument)
 {
     char *remote = malloc(81);
